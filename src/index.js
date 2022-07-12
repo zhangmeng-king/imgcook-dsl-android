@@ -1,4 +1,5 @@
 module.exports = function (layoutData, opts) {
+  ///锁定规则为android
   opts.rule = 'android';
 
   let optionSettingData = parseOptionSetting(opts);
@@ -7,7 +8,6 @@ module.exports = function (layoutData, opts) {
     parseBindingData(layoutData);
     resolveDataMapping(layoutData);
   }
-
   let resultData = generateTargetDSL(layoutData, optionSettingData);
 
   if (optionSettingData['doTrace']) {
@@ -38,6 +38,7 @@ module.exports = function (layoutData, opts) {
     style: resultData['layout'],
     prettierOpt: {
       printWidth: 120,
+      /// 是否单引号
       singleQuote: false,
     },
     noTemplate: true,
@@ -48,6 +49,7 @@ function parseOptionSetting(opts) {
   let settingData = {};
 
   let originData = opts.originData;
+  /// 语义的
   semanticData = opts.semanticData;
 
   fromImgcook = false;
@@ -126,6 +128,8 @@ const DINAMIC_NAMESPACE =
   'xmlns:dinamic="http://schemas.android.com/apk/res-auto"';
 const ANDROID_NAMESPACE =
   'xmlns:android="http://schemas.android.com/apk/res/android"';
+const APP_NAMESPACE =
+  'xmlns:app="http://schemas.android.com/apk/res-auto"';
 const LINE_INDENT = '    ';
 
 /** 缩放比例， 一般基于750， 手淘部分基于375 */
@@ -160,6 +164,7 @@ const RULE_TYPE = {
   RULE_2: '2.0',
   RULE_3: '3.0',
   RULE_N: 'android',
+  RULE_APP: 'app',
 };
 const SCALE_TYPE = {
   SCALE_1: '1.0',
@@ -171,6 +176,7 @@ const VIEW_TYPE = {
   TEXT_VIEW: 'DTextView',
   IMAGE_VIEW: 'HImageView',
   GROUP: 'ViewGroup',
+  LAYER: 'androidx.constraintlayout.helper.widget.Layer'
 };
 
 const ORIENTATION_TYPE = {
@@ -182,6 +188,7 @@ const ORIENTATION_TYPE = {
 const LAYOUT_TYPE = {
   LINEARLAYOUT: 'DLinearLayout',
   FRAMELAYOUT: 'DFrameLayout',
+  CONSTRAINTLAYOUT: 'androidx.constraintlayout.widget.ConstraintLayout',
 };
 
 /********************************************************************
@@ -211,6 +218,7 @@ function parseBindingData(layoutData) {
                 obj.handEdit = child.defaultValue != obj.bindValue;
               }
             } else {
+              ///手动编辑
               obj.handEdit = child.value.isHandEdit;
               if (isValidValue(child.value.sourceValue)) {
                 obj.bindValue = child.value.sourceValue;
@@ -348,7 +356,7 @@ function resolveMockData(widget) {
   if (ignoreDataMock || nativeMode) return;
   console.log(
     'resolveSemanticDataKey: ' +
-      JSON.stringify(resolveSemanticDataKey(widget.id), null, 2)
+    JSON.stringify(resolveSemanticDataKey(widget.id), null, 2)
   );
   if (widget.viewType == VIEW_TYPE.TEXT_VIEW) {
     if (isDefined(widget.priceModel)) {
@@ -372,7 +380,11 @@ function resolveMockData(widget) {
     widget.src = `@data{data.${key}}`;
   }
 }
-
+/**
+ * 解析语义化的数据
+ * @param  widgetId 
+ * @returns 
+ */
 function resolveSemanticDataKey(widgetId) {
   if (widgetId && semanticData && semanticData.length > 0) {
     for (var index = 0; index < semanticData.length; index++) {
@@ -485,7 +497,7 @@ function resolveChildData(viewGroup, childData) {
         return;
       }
       if (childView && childView.left < viewGroup.left + viewGroup.width) {
-        childView.id = childData.id;
+        childView.id = childData.id.replace('-', '_');
         if (!childToParentBackground(childView, viewGroup)) {
           childView.depth = viewGroup.depth + 1;
           viewGroup.children.push(childView);
@@ -499,7 +511,10 @@ function resolveChildData(viewGroup, childData) {
 /******************************************************
                       布局策略
  ******************************************************/
-
+/**
+ * 纵向区域
+ * @param  parent 
+ */
 function splitVerticalArea(parent) {
   if (parent) {
     let children = parent.children;
@@ -565,7 +580,10 @@ function splitVerticalArea(parent) {
     }
   }
 }
-
+/**
+ * 横向区域
+ * @param {} parent 
+ */
 function splitHorizontalArea(parent) {
   if (parent) {
     let children = parent.children;
@@ -577,12 +595,8 @@ function splitHorizontalArea(parent) {
         let isSpace = true;
         for (var index = 0; index < length; index++) {
           let child = children[index];
-          if (
-            isContainRect(left, child, 'horizontal') &&
-            child.height != parent.height
-          ) {
+          if (isContainRect(left, child, 'horizontal') && child.height != parent.height) {
             isSpace = false;
-            // console.log('splitHorizontalArea xxxxxx: ' + top);
             break;
           }
         }
@@ -1089,17 +1103,17 @@ function judgeGroupOrientation(viewGroup) {
   viewGroup.orientation = getGroupOrientation(viewGroup);
   switch (viewGroup.orientation) {
     case ORIENTATION_TYPE.HORIZONTAL:
-      viewGroup.viewType = LAYOUT_TYPE.LINEARLAYOUT;
+      viewGroup.viewType = LAYOUT_TYPE.CONSTRAINTLAYOUT;
       viewGroup.children = viewGroup.childrenFromLeft;
       setLinearChildrenParams(viewGroup, viewGroup.orientation);
       break;
     case ORIENTATION_TYPE.VERTICAL:
-      viewGroup.viewType = LAYOUT_TYPE.LINEARLAYOUT;
+      viewGroup.viewType = LAYOUT_TYPE.CONSTRAINTLAYOUT;
       viewGroup.children = viewGroup.childrenFromTop;
       setLinearChildrenParams(viewGroup, viewGroup.orientation);
       break;
     case ORIENTATION_TYPE.ABSOLUTE:
-      viewGroup.viewType = LAYOUT_TYPE.FRAMELAYOUT;
+      viewGroup.viewType = VIEW_TYPE.LAYER;
       viewGroup.children = viewGroup.childrenFromLeftTop;
       setFrameChildrenParams(viewGroup);
       break;
@@ -1147,14 +1161,9 @@ function setLinearChildrenParams(viewGroup, orientation) {
     let length = viewGroup.children.length;
     let tempLeft = viewGroup.left;
     let tempTop = viewGroup.top;
-
-    if (canSetWrapContentWidth(viewGroup)) {
-      viewGroup.wrapContentWidth = true;
-    }
-    if (canSetWrapContentHeight(viewGroup)) {
-      viewGroup.wrapContentHeight = true;
-    }
-
+    viewGroup.wrapContentWidth = true;
+    viewGroup.wrapContentHeight = true;
+    let baseRef = 'parent'
     for (var index = 0; index < length; index++) {
       var child = viewGroup.children[index];
       child.marginLeft = Math.max(0, child.left - tempLeft);
@@ -1162,15 +1171,26 @@ function setLinearChildrenParams(viewGroup, orientation) {
       child.gravity = undefined;
       if (orientation == ORIENTATION_TYPE.HORIZONTAL) {
         tempLeft += child.marginLeft + child.width;
-        if (canSetGravityCenter(child, viewGroup)) {
-          child.marginTop = undefined;
-          child.gravity = 'center';
+        if (index == 0) {
+          child.startToStart = baseRef
+        } else {
+          child.startToEnd = '@+id/' + baseRef
         }
       } else if (orientation == ORIENTATION_TYPE.VERTICAL) {
         tempTop += child.marginTop + child.height;
+        if (index == 0) {
+          child.topToTop = baseRef
+        } else {
+          child.topToBottom = '@+id/' + baseRef
+        }
       }
       child.marginLeft = child.marginLeft == 0 ? undefined : child.marginLeft;
       child.marginTop = child.marginTop == 0 ? undefined : child.marginTop;
+      if (child.viewType == VIEW_TYPE.LAYER) {
+        child.marginLeft = undefined;
+        child.marginTop = undefined;
+      }
+      baseRef = child.id.toLowerCase()
     }
   }
 }
@@ -1178,52 +1198,39 @@ function setLinearChildrenParams(viewGroup, orientation) {
 function setFrameChildrenParams(viewGroup) {
   if (viewGroup.children && viewGroup.children.length > 0) {
     let length = viewGroup.children.length;
-
-    if (canSetWrapContentWidth(viewGroup)) {
-      viewGroup.wrapContentWidth = true;
-    }
-    if (canSetWrapContentHeight(viewGroup)) {
-      viewGroup.wrapContentHeight = true;
-    }
-    if (length == 1) {
-      var child = viewGroup.children[0];
-      if (child.viewType == VIEW_TYPE.TEXT_VIEW && !nativeMode) {
-        viewGroup.wrapContentWidth = true;
-        viewGroup.wrapContentHeight = true;
-        child.marginLeft = child.left - viewGroup.left;
-        child.marginTop = child.top - viewGroup.top;
-        child.marginRight =
-          viewGroup.left + viewGroup.width - child.left - child.width;
-        child.marginBottom =
-          viewGroup.top + viewGroup.height - child.top - child.height;
-        child.textGravity = 'center';
-      } else {
-        viewGroup.children[0].gravity = 'center';
-      }
-    } else if (
-      length == 2 &&
-      isSameArea(viewGroup.children[0], viewGroup) &&
-      viewGroup.children[1].viewType == VIEW_TYPE.TEXT_VIEW
-    ) {
-      viewGroup.children[1].gravity = 'center';
+    viewGroup.wrapContentWidth = true;
+    viewGroup.wrapContentHeight = true;
+    viewGroup.marginLeft = undefined
+    viewGroup.marginTop = undefined
+    viewGroup.constraintTag = viewGroup.id
+    var firstChild = viewGroup.children[0]
+    if (firstChild.viewType != LAYOUT_TYPE.LAYER) {
+      firstChild.marginLeft = firstChild.left;
+      firstChild.marginTop = firstChild.top;
     } else {
+      firstChild.marginLeft = undefined;
+      firstChild.marginTop = undefined;
+    }
+    firstChild.constraintTag = viewGroup.id
+    viewGroup.topToTop = '@+id/' + firstChild.id.toLowerCase()
+    viewGroup.startToStart = '@+id/' + firstChild.id.toLowerCase()
+    firstChild.startToEnd = viewGroup.startToEnd
+    firstChild.topToBottom = viewGroup.topToBottom
+    if (length > 1) {
       let tempLeft = viewGroup.left;
       let tempTop = viewGroup.top;
-      for (var index = 0; index < length; index++) {
+      for (var index = 1; index < length; index++) {
         var child = viewGroup.children[index];
-        child.marginLeft = Math.max(0, child.left - tempLeft);
-        child.marginLeft = child.marginLeft == 0 ? undefined : child.marginLeft;
-        child.gravity = undefined;
-        if (canSetGravityCenter(child, viewGroup)) {
-          child.marginTop = undefined;
-          child.gravity = getAttrsValue('leftCenter');
-        } else if (canSetGravityBottom(child, viewGroup)) {
-          child.marginTop = undefined;
-          child.gravity = getAttrsValue('leftBottom');
+        child.constraintTag = viewGroup.id
+        if (child.viewType != LAYOUT_TYPE.LAYER) {
+          child.marginLeft = child.left;
+          child.marginTop = child.top;
         } else {
-          child.marginTop = Math.max(0, child.top - tempTop);
-          child.marginTop = child.marginTop == 0 ? undefined : child.marginTop;
+          child.marginLeft = undefined;
+          child.marginTop = undefined;
         }
+        child.startToEnd = viewGroup.startToEnd
+        child.topToBottom = viewGroup.topToBottom
       }
     }
   }
@@ -1300,6 +1307,11 @@ var View = function () {
   var depth;
   var description;
   var defaultValue;
+  var constraintTag;
+  var startToStart;
+  var topToTop;
+  var startToEnd;
+  var topToBottom;
 };
 
 View.create = function (propsJsonData) {
@@ -1337,11 +1349,10 @@ View.prototype.initParams = function (propsJsonData) {
             rgb[2],
             this.opacity
           );
-          this.description = `<!-- backgroundColor是渐变色，注意检查是否需要处理成图片 ${
-            transRGBAColor2HexWithOpacity(rgb[1], this.opacity) +
+          this.description = `<!-- backgroundColor是渐变色，注意检查是否需要处理成图片 ${transRGBAColor2HexWithOpacity(rgb[1], this.opacity) +
             ',' +
             transRGBAColor2HexWithOpacity(rgb[2], this.opacity)
-          } -->`;
+            } -->`;
         }
       }
 
@@ -1426,11 +1437,9 @@ View.prototype.exportBasicDSL = function () {
   }
 
   let attrs = {};
-  // if (nativeMode) {
-  //   if (this.id) {
-  //     attrs["id"] = `@+id/${this.id.toLowerCase()}`;
-  //   }
-  // }
+  if (isDefined(this.id)) {
+    attrs["id"] = `@+id/${this.id.toLowerCase()}`;
+  }
   attrs[getAttrsName('width')] =
     scalePoint(this.width) == 0.5 ? '0.5np' : scalePoint(this.width);
   attrs[getAttrsName('height')] =
@@ -1500,6 +1509,41 @@ View.prototype.exportBasicDSL = function () {
   if (isDefined(this.gravity)) {
     attrs[getAttrsName('gravity')] = this.gravity;
   }
+  let constrainedHorizontally = false
+  let constrainedVertically = false
+  if (isDefined(this.topToTop)) {
+    attrs[getAttrsName('topToTop')] = this.topToTop;
+    constrainedVertically = true
+  }
+  if (isDefined(this.startToStart)) {
+    attrs[getAttrsName('startToStart')] = this.startToStart;
+    constrainedHorizontally = true
+  }
+  if (isDefined(this.startToEnd) || this.viewType == VIEW_TYPE.LAYER) {
+    if (this.viewType != VIEW_TYPE.LAYER) {
+      attrs[getAttrsName('startToEnd')] = this.startToEnd;
+    }
+    constrainedHorizontally = true
+  }
+  if (isDefined(this.topToBottom)|| this.viewType == VIEW_TYPE.LAYER) {
+    if (this.viewType != VIEW_TYPE.LAYER) {
+      attrs[getAttrsName('topToBottom')] = this.topToBottom;
+    }
+    constrainedVertically = true
+  }
+  if (!constrainedVertically && this.id != 'root_group') {
+    attrs[getAttrsName('topToTop')] = 'parent';
+  }
+  if (!constrainedHorizontally && this.id != 'root_group') {
+    attrs[getAttrsName('startToStart')] = 'parent';
+  }
+  if (isDefined(this.constraintTag)) {
+    if (this.viewType == VIEW_TYPE.LAYER) {
+      attrs['constraint_referenced_tags'] = this.constraintTag
+    } else {
+      attrs['layout_constraintTag'] = this.constraintTag
+    }
+  }
   return attrs;
 };
 
@@ -1524,14 +1568,15 @@ var ViewGroup = function () {
   var childrenFromLeft;
   var childrenFromTop;
   var childrenFromLeftTop;
-
+  var constraintTag;
   var wrapContentWidth;
   var wrapContentHeight;
-
   var overlapChekced;
   var innerChildChecked;
   var linearCheckedDirection;
 };
+
+
 
 ViewGroup.prototype = new View();
 
@@ -1554,7 +1599,7 @@ function resetChildDepth(children, delta) {
 /** 存在重叠关系的控件用一个group进行归拢 */
 ViewGroup.createFromArray = function (overlapArray) {
   var viewGroup = new ViewGroup();
-  viewGroup.id = `group_new_${overlapArray[0].id}`;
+  viewGroup.id = `group_${overlapArray[0].id}`;
   viewGroup.depth = overlapArray[0].depth;
 
   resetChildDepth(overlapArray, 1);
@@ -1686,7 +1731,6 @@ ViewGroup.prototype.exportDSL = function () {
   let layoutStartTag = '';
   let layoutEndTag = '';
   let parentIndent = getIndent(this.depth);
-
   let attrs = {};
 
   if (this.depth == 0) {
@@ -1702,7 +1746,7 @@ ViewGroup.prototype.exportDSL = function () {
   layoutEndTag = `</${getWidgetTag(this.viewType)}>`;
 
   result += parentIndent + layoutStartTag;
-
+  let layerType = this.viewType == VIEW_TYPE.LAYER
   attrs = this.exportBasicDSL();
   if (this.wrapContentWidth) {
     attrs[getAttrsName('width')] = getAttrsValue('match_content');
@@ -1712,22 +1756,30 @@ ViewGroup.prototype.exportDSL = function () {
   }
   if (
     isDefined(this.orientation) &&
-    this.orientation != ORIENTATION_TYPE.ABSOLUTE
+    this.orientation != ORIENTATION_TYPE.ABSOLUTE &&
+    this.viewType != LAYOUT_TYPE.CONSTRAINTLAYOUT
   ) {
     attrs[getAttrsName('orientation')] = this.orientation;
   }
-  result += `${formatAttrs(attrs, getIndent(this.depth + 1))}>`;
-
+  result += `${formatAttrs(attrs, getIndent(this.depth + 1))}`;
+  if (layerType) {
+    result += ' />'
+  } else {
+    result += '>'
+  }
   if (this.children && this.children.length > 0) {
     for (var i = 0; i < this.children.length; i++) {
       var child = this.children[i];
+      if (layerType) {
+        child.depth = this.depth
+      }
       result += '\n\n';
       result += child.exportDSL();
     }
   }
-
-  result += '\n\n' + parentIndent + layoutEndTag;
-
+  if (!layerType) {
+    result += '\n\n' + parentIndent + layoutEndTag;
+  }
   return result;
 };
 
@@ -1788,7 +1840,6 @@ TextView.prototype.exportDSL = function () {
   if (!this.mocked) {
     resolveMockData(this);
   }
-
   let parentIndent = getIndent(this.depth);
   let result = '';
   if (isDefined(this.description)) {
@@ -1802,9 +1853,8 @@ TextView.prototype.exportDSL = function () {
     ? '<RPriceView '
     : `<${getWidgetTag(this.viewType)} `;
   let attrs = this.exportBasicDSL();
-  if (!this.fixed) {
-    attrs[getAttrsName('width')] = getAttrsValue('match_content');
-  }
+
+  attrs[getAttrsName('width')] = getAttrsValue('match_content');
   attrs[getAttrsName('height')] = getAttrsValue('match_content');
   if (!isDefined(this.priceModel)) {
     attrs[getAttrsName('lineBreakMode')] = 'end';
@@ -1813,7 +1863,9 @@ TextView.prototype.exportDSL = function () {
     if (isDefined(this.priceModel)) {
       attrs['rPriceTextSize'] = scalePoint(this.fontSize);
     } else {
-      attrs[getAttrsName('textSize')] = scalePoint(this.fontSize);
+      let fontSize = scalePoint(this.fontSize);
+      fontSize = fontSize.replace('dp', 'sp');
+      attrs[getAttrsName('textSize')] = fontSize;
     }
   }
   if (isDefined(this.color)) {
@@ -1823,9 +1875,9 @@ TextView.prototype.exportDSL = function () {
       attrs[getAttrsName('textColor')] = this.color;
     }
   }
-  if (isDefined(this.lines) && !isDefined(this.priceModel)) {
-    attrs[getAttrsName('maxLines')] = this.lines;
-  }
+  // if (isDefined(this.lines) && !isDefined(this.priceModel)) {
+  //   attrs[getAttrsName('maxLines')] = this.lines;
+  // }
   if (isDefined(this.textGravity) && !isDefined(this.priceModel)) {
     attrs[getAttrsName('textGravity')] = this.textGravity;
   }
@@ -1901,6 +1953,8 @@ ImageView.prototype.exportDSL = function () {
   result += getIndent(this.depth);
   result += `<${getWidgetTag(this.viewType)} `;
   let attrs = this.exportBasicDSL();
+  attrs[getAttrsName('width')] = getAttrsValue('match_content');
+  attrs[getAttrsName('height')] = getAttrsValue('match_content');
   if (isDefined(this.src)) {
     attrs[getAttrsName('imageUrl')] = this.src;
   }
@@ -2094,12 +2148,18 @@ function trans2LowerDash(str) {
 function scalePoint(x) {
   let num = parseFloat(x);
   num /= SCALE_FACTOR;
+  num = Math.round(num)
   if (nativeMode) {
     num += 'dp';
   }
   return num;
 }
 
+/**
+ * 缩进
+ * @param  depth 深度
+ * @returns 缩进操作后的字符串
+ */
 function getIndent(depth) {
   let attrsIndent = '';
   for (var i = 0; i < depth; i++) {
@@ -2113,15 +2173,29 @@ const formatAttrs = function (attrs, indent) {
   var sorted = Object.keys(attrs);
   sorted.forEach(function (s) {
     ret += '\n' + indent;
-    ret += ` ${getAttrsPrefix() + s}="${attrs[s]}"`;
+    let prefix = getAttrsPrefix()
+    if (s.indexOf('constraint') != -1) {
+      prefix = "app:"
+    }
+    ret += ` ${prefix + s}="${attrs[s]}"`;
   });
   return ret;
 };
-
+/**
+ * 差值在3以内
+ * @param {*} value1 
+ * @param {*} value2 
+ * @returns 
+ */
 function deltaDiff3(value1, value2) {
   return Math.abs(value1 - value2) <= DELTA_SIZE_3;
 }
-
+/**
+ * 差值在5以内
+ * @param {*} value1 
+ * @param {*} value2 
+ * @returns 
+ */
 function deltaDiff5(value1, value2) {
   return Math.abs(value1 - value2) <= DELTA_SIZE_5;
 }
@@ -2157,6 +2231,7 @@ var isTypeGroup = function (view) {
     case VIEW_TYPE.GROUP:
     case LAYOUT_TYPE.LINEARLAYOUT:
     case LAYOUT_TYPE.FRAMELAYOUT:
+    case LAYOUT_TYPE.CONSTRAINTLAYOUT:
       return true;
     default:
       return false;
@@ -2412,7 +2487,7 @@ function getNameSpace() {
   if (targetDSLType == RULE_TYPE.RULE_2) {
     return DINAMIC_NAMESPACE;
   } else if (targetDSLType == RULE_TYPE.RULE_N) {
-    return ANDROID_NAMESPACE;
+    return ANDROID_NAMESPACE + '\n ' + LINE_INDENT + APP_NAMESPACE;
   }
   return '';
 }
@@ -2456,6 +2531,10 @@ function getWidgetTag(widgetType) {
     } else {
       return 'View';
     }
+  } else if (widgetType == LAYOUT_TYPE.CONSTRAINTLAYOUT) {
+    return LAYOUT_TYPE.CONSTRAINTLAYOUT
+  } else if (widgetType == VIEW_TYPE.LAYER) {
+    return VIEW_TYPE.LAYER
   }
 }
 
@@ -2475,127 +2554,127 @@ function getAttrsName(key) {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dWidth'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'width'
-        : 'layout_width';
+          ? 'width'
+          : 'layout_width';
     }
     case 'height': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dHeight'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'height'
-        : 'layout_height';
+          ? 'height'
+          : 'layout_height';
     }
     case 'orientation': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dOrientation'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'orientation'
-        : 'orientation';
+          ? 'orientation'
+          : 'orientation';
     }
     case 'marginLeft': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dMarginLeft'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'marginLeft'
-        : 'layout_marginLeft';
+          ? 'marginLeft'
+          : 'layout_marginStart';
     }
     case 'marginRight': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dMarginRight'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'marginRight'
-        : 'layout_marginRight';
+          ? 'marginRight'
+          : 'layout_marginEnd';
     }
     case 'marginTop': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dMarginTop'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'marginTop'
-        : 'layout_marginTop';
+          ? 'marginTop'
+          : 'layout_marginTop';
     }
     case 'marginBottom': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dMarginBottom'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'marginBottom'
-        : 'layout_marginBottom';
+          ? 'marginBottom'
+          : 'layout_marginBottom';
     }
     case 'backgroundColor': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dBackgroundColor'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'backgroundColor'
-        : 'background';
+          ? 'backgroundColor'
+          : 'background';
     }
     case 'gravity': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dGravity'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'gravity'
-        : 'layout_gravity';
+          ? 'gravity'
+          : 'layout_gravity';
     }
     case 'text': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dText'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'text'
-        : 'text';
+          ? 'text'
+          : 'text';
     }
     case 'textSize': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dTextSize'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'textSize'
-        : 'textSize';
+          ? 'textSize'
+          : 'textSize';
     }
     case 'textColor': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dTextColor'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'textColor'
-        : 'textColor';
+          ? 'textColor'
+          : 'textColor';
     }
     case 'lineBreakMode': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dLineBreakMode'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'lineBreakMode'
-        : 'ellipsize';
+          ? 'lineBreakMode'
+          : 'ellipsize';
     }
     case 'maxLines': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dMaxLines'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'maxLines'
-        : 'maxLines';
+          ? 'maxLines'
+          : 'maxLines';
     }
     case 'textGravity': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dTextGravity'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'textGravity'
-        : 'gravity';
+          ? 'textGravity'
+          : 'gravity';
     }
     case 'imageUrl': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'hImageUrl'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'imageUrl'
-        : 'src';
+          ? 'imageUrl'
+          : 'src';
     }
     case 'borderWidth': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dBorderWidth'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'borderWidth'
-        : 'borderWidth';
+          ? 'borderWidth'
+          : 'borderWidth';
     }
     case 'borderColor': {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dBorderColor'
         : targetDSLType == RULE_TYPE.RULE_3
-        ? 'borderColor'
-        : 'borderColor';
+          ? 'borderColor'
+          : 'borderColor';
     }
     case 'cornerRadius': {
       return targetDSLType == RULE_TYPE.RULE_2
@@ -2621,6 +2700,23 @@ function getAttrsName(key) {
       return targetDSLType == RULE_TYPE.RULE_2
         ? 'dClipBottomRightRadius'
         : 'cornerRadiusRightBottom';
+    }
+    case 'id': {
+      return targetDSLType == RULE_TYPE.RULE_2
+        ? 'dId'
+        : 'id';
+    }
+    case 'startToStart': {
+      return 'layout_constraintStart_toStartOf';
+    }
+    case 'topToTop': {
+      return 'layout_constraintTop_toTopOf';
+    }
+    case 'startToEnd': {
+      return 'layout_constraintStart_toEndOf';
+    }
+    case 'topToBottom': {
+      return 'layout_constraintTop_toBottomOf';
     }
   }
 }
