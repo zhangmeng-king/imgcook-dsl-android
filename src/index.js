@@ -9,11 +9,7 @@ module.exports = function (layoutData, opts) {
     resolveDataMapping(layoutData);
   }
   let resultData = generateTargetDSL(layoutData, optionSettingData);
-
   if (optionSettingData['doTrace']) {
-    // console.log(
-    //   'efficiencyValue: ' + resultData['xmlResult']['efficiencyValue']
-    // );
     traceViewXUseLog(
       opts.http,
       opts.querystring,
@@ -146,6 +142,8 @@ var layoutDataIdMap;
 var layoutDataOIdMap;
 /** key = jsonId, value = dataToBind */
 var bindingDataIdMap;
+/** key = viewType, value = 相应type的数目 */
+var viewTypeMap;
 
 var mockData;
 var mockTxtDataIndex = 0;
@@ -254,6 +252,39 @@ function parseViewGroup(groupData) {
       parseSingleView(child);
     }
   });
+}
+
+var generateResId = function (viewType) {
+  if (viewTypeMap == null) {
+    viewTypeMap = HashMap.create();
+  }
+  let num = viewTypeMap.get(viewType);
+  if (num == null) {
+    num = 0;
+  }
+  num++;
+  viewTypeMap.put(viewType, num);
+  let prefix = '';
+  switch (viewType) {
+    case VIEW_TYPE.VIEW:
+      prefix = 'view';
+      break;
+    case VIEW_TYPE.TEXT_VIEW:
+      prefix = 'tv';
+      break;
+    case VIEW_TYPE.IMAGE_VIEW:
+      prefix = 'iv';
+      break;
+    case VIEW_TYPE.GROUP:
+      prefix = 'group';
+      break;
+    case VIEW_TYPE.LAYER:
+      prefix = 'layer';
+      break;
+    default:
+      break;
+  }
+  return prefix + '_' + num;
 }
 
 function parseSingleView(data) {
@@ -451,7 +482,6 @@ function resolveChildData(viewGroup, childData) {
     let childType = childData.type;
     var propsData = childData.props;
     var viewType = VIEW_TYPE.VIEW;
-
     if (
       equalsIgnoreCase(childType, 'div') ||
       equalsIgnoreCase(childType, 'repeat')
@@ -459,6 +489,7 @@ function resolveChildData(viewGroup, childData) {
       let children = childData.children;
       if (children && typeof children == 'object' && children.length > 0) {
         var childViewGroup = ViewGroup.create(propsData);
+        childViewGroup.id = generateResId(VIEW_TYPE.GROUP);
         childViewGroup.depth = viewGroup.depth + 1;
         viewGroup.children.push(childViewGroup);
         resolveChildrenData(childViewGroup, children);
@@ -474,7 +505,6 @@ function resolveChildData(viewGroup, childData) {
     } else if (equalsIgnoreCase(childType, 'text')) {
       viewType = VIEW_TYPE.TEXT_VIEW;
     }
-
     if (propsData && typeof propsData == 'object') {
       var childView = null;
       switch (viewType) {
@@ -495,9 +525,11 @@ function resolveChildData(viewGroup, childData) {
       }
       if (viewType == VIEW_TYPE.VIEW && childView.overflow == 'hidden') {
         return;
+      }    
+      if (childView != null) {
+        childView.id = generateResId(viewType);
       }
       if (childView && childView.left < viewGroup.left + viewGroup.width) {
-        childView.id = childData.id.replace('-', '_');
         if (!childToParentBackground(childView, viewGroup)) {
           childView.depth = viewGroup.depth + 1;
           viewGroup.children.push(childView);
@@ -1114,6 +1146,7 @@ function judgeGroupOrientation(viewGroup) {
       break;
     case ORIENTATION_TYPE.ABSOLUTE:
       viewGroup.viewType = VIEW_TYPE.LAYER;
+      viewGroup.id = generateResId(VIEW_TYPE.LAYER);
       viewGroup.children = viewGroup.childrenFromLeftTop;
       setFrameChildrenParams(viewGroup);
       break;
@@ -1599,7 +1632,7 @@ function resetChildDepth(children, delta) {
 /** 存在重叠关系的控件用一个group进行归拢 */
 ViewGroup.createFromArray = function (overlapArray) {
   var viewGroup = new ViewGroup();
-  viewGroup.id = `group_${overlapArray[0].id}`;
+  viewGroup.id = generateResId(VIEW_TYPE.GROUP);
   viewGroup.depth = overlapArray[0].depth;
 
   resetChildDepth(overlapArray, 1);
