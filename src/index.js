@@ -1796,7 +1796,7 @@ ViewGroup.prototype.exportDSL = function () {
   layoutEndTag = `</${getWidgetTag(this.viewType)}>`;
 
   let layerType = this.viewType == VIEW_TYPE.LAYER
-  let needShow = !layerType
+  let needShow = true
   //多余的父布局
   let spare = this.depth > 0 && this.viewType == LAYOUT_TYPE.CONSTRAINTLAYOUT && !isValidValue(this.backgroundColor)
   let downsize = layerType || spare
